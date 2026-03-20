@@ -24,6 +24,32 @@ export const appRouter = router({
       });
       return offer;
     }),
+  accept:publicProcedure
+    .input(
+      z.object({ offerId: z.string().min(1, "Offer ID is required") }),
+    )
+    .mutation(async ({ input }) => {
+      const offer = await prisma.offer.update({
+        where: { id: input.offerId },
+        data: { accepted: true },
+      });
+      return offer;
+    }),
+  rate:publicProcedure
+    .input(
+      z.object({
+         offerId: z.string().min(1, "Offer ID is required"),
+          rating: z.number().min(1).max(17, "Rating must be between 1 and 17"), 
+        }),
+    )
+    .mutation(async ({ input }) => {
+      const offer = await prisma.offer.update({
+        where: { id: input.offerId },
+        data: { rating: input.rating },
+      });
+      return offer;
+    }),
+
   login: publicProcedure
     .input(
       z.object({

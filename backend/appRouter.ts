@@ -4,6 +4,26 @@ import { z } from "zod";
 import { prisma } from "./db";
 import { sign } from "jsonwebtoken";
 export const appRouter = router({
+  fetchOffers: publicProcedure
+    .query(async () => {
+      return await prisma.offer.findMany();
+    }),
+  postOffer: publicProcedure
+    .input(
+      z.object({
+        title: z.string().min(1, "Title is required"),
+        content: z.string().min(1, "Content is required"),
+        published: z.boolean().default(true),
+        author:z.string().min(1, "Author is required"),
+        authorId:z.string().min(1, "Author ID is required"),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const offer = await prisma.offer.create({
+        data: { ...input},
+      });
+      return offer;
+    }),
   login: publicProcedure
     .input(
       z.object({
@@ -23,7 +43,7 @@ export const appRouter = router({
         throw new Error("Invalid username or password");
       }
       return {
-        toke: sign(
+        toke: sign(//TODO: fix typo
           { userId: user.id, username: user.username },
           "some-secret",
           { expiresIn: "1h" },

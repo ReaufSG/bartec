@@ -18,4 +18,28 @@ model User {
   passwordHash String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  offers       Offer[]
+  accepts      Accept[]
+}
+
+model Offer {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  maker       User     @relation(fields: [makerId], references: [id])
+  makerId     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  accepts     Accept[]
+}
+
+model Accept {
+  id          String   @id @default(cuid())
+  offer       Offer    @relation(fields: [offerId], references: [id])
+  offerId     String
+  taker       User     @relation(fields: [takerId], references: [id])
+  takerId     String
+  takerRating Int?
+  makerRating Int?
+  createdAt   DateTime @default(now())
 }

@@ -13,17 +13,33 @@ datasource db {
 // Example models
 
 model User {
-  id    Int     @id @default(autoincrement())
-  email String  @unique
-  name  String?
-  posts Post[]
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  offers       Offer[]
+  accepts      Accept[]
 }
 
-model Post {
-  id        Int     @id @default(autoincrement())
-  title     String
-  content   String?
-  published Boolean @default(false)
-  author    User    @relation(fields: [authorId], references: [id])
-  authorId  Int
+model Offer {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  maker       User     @relation(fields: [makerId], references: [id])
+  makerId     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  accepts     Accept[]
+}
+
+model Accept {
+  id          String   @id @default(cuid())
+  offer       Offer    @relation(fields: [offerId], references: [id])
+  offerId     String
+  taker       User     @relation(fields: [takerId], references: [id])
+  takerId     String
+  takerRating Int?
+  makerRating Int?
+  createdAt   DateTime @default(now())
 }

@@ -3,6 +3,7 @@ import { useContext, useState } from "react";
 import { TextInput, View } from "react-native";
 import { trpc } from "@/lib/trpc_client";
 import { TokenContext } from "@/lib/context";
+import React from "react";
 export default function Login() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -17,21 +18,19 @@ export default function Login() {
         secureTextEntry
       />
       <Button
-        title="Login"
         onPress={() =>
           storage!
             .login({ username: name, password })
             .catch((e) => console.error(e))
         }
-      />
+      >Login</Button>
       <Button
-        title="SignUp"
         onPress={() =>
           storage!
             .createUser({ username: name, password })
             .catch((e) => console.error(e))
         }
-      />
+      >SignUp</Button>
     </View>
   );
 }

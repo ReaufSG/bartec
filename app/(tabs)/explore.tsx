@@ -10,6 +10,7 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { Fonts } from "@/constants/theme";
 import { TokenContext } from "@/lib/context";
 import { useContext } from "react";
+import React from "react";
 
 export default function TabTwoScreen() {
   const storage = useContext(TokenContext);

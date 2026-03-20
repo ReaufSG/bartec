@@ -1,6 +1,6 @@
 import { Tabs } from 'expo-router';
 import { View, StyleSheet } from 'react-native';
-
+import React from 'react';
 const C = {
   bg:       '#05070d',
   surface2: '#090d18',

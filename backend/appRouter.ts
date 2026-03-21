@@ -4,6 +4,85 @@ import { z } from "zod";
 import { prisma } from "./db";
 import { publicProcedure, router } from "./trpc";
 export const appRouter = router({
+  fetchOffers: publicProcedure.query(async () => {
+    return await prisma.offer.findMany();
+  }),
+  postOffer: publicProcedure
+    .input(
+      z.object({
+        title: z.string().min(1, "Title is required"),
+        description: z.string().min(1, "Description is required"),
+        makerId: z.string().min(1, "makerId is required"),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const offer = await prisma.offer.create({
+        data: {
+          title: input.title,
+          description: input.description,
+          makerId: input.makerId,
+        },
+      });
+      return offer;
+    }),
+  accept: publicProcedure
+    .input(
+      z.object({
+        offerId: z.string().min(1, "Offer ID is required"),
+        takerId: z.string().min(1, "Taker ID is required"),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const offer = await prisma.offer.update({
+        where: { id: input.offerId },
+        data: { accepts: { create: { takerId: input.takerId } } },
+      });
+      return offer;
+    }),
+  rateOffer: publicProcedure
+    .input(
+      z.object({
+        offerId: z.string().min(1, "Offer ID is required"),
+        userId: z.string().min(1, "User ID is required"),
+        rating: z
+          .number()
+          .min(1, "Rating must be at least 1")
+          .max(5, "Rating must be at most 5"),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const offer = await prisma.offer.findFirst({
+        include: { accepts: true },
+        where: {
+          AND: [
+            { id: input.offerId },
+            {
+              OR: [
+                { makerId: input.userId },
+                { accepts: { takerId: input.userId } },
+              ],
+            },
+          ],
+        },
+      });
+      if (!offer) {
+        throw new Error("Offer not found or user not involved");
+      }
+      if (input.userId === offer.makerId) {
+        await prisma.accept.update({
+          where: { id: offer.accepts?.id },
+          data: { makerRating: input.rating },
+        });
+      } else {
+        await prisma.accept.update({
+          where: { id: offer.accepts?.id },
+          data: { takerRating: input.rating },
+        });
+      }
+
+      return offer;
+    }),
+
   login: publicProcedure
     .input(
       z.object({

@@ -134,7 +134,34 @@ export const appRouter = router({
       };
     });
   }),
+  activateCode: publicProcedure
+    .input(
+      z.object({
+        userId: z.string().min(1),
+        code: z.string().length(4, "Code must be 4 characters"),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const user = await prisma.user.findUnique({
+        where: { id: input.userId },
+      });
+      if (!user) throw new Error("User not found");
 
+      const codeRecord = await prisma.setupCodes.findUnique({
+        where: { code: input.code },
+      });
+      if (!codeRecord) throw new Error("Invalid code");
+      if (codeRecord.used) throw new Error("Code already used");
+      await prisma.setupCodes.update({
+        where: { code: input.code },
+        data: { used: true },
+      });
+      await prisma.user.update({
+        where: { id: input.userId },
+        data: { points: { decrement: 1000 } },
+      });
+      return { ok: true, message: "Code activated, 1000 points deducted" };
+    }),
   postOffer: publicProcedure
     .input(
       z.object({

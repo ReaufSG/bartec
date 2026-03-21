@@ -66,19 +66,7 @@ export const appRouter = router({
       await prisma.accept.deleteMany({ where: { offerId: input.id } });
       return await prisma.offer.delete({ where: { id: input.id } });
     }),
-  changePoints: publicProcedure
-    .input(
-      z.object({
-        userId: z.string().min(1),
-        pointsAmount: z.number(),
-      }),
-    )
-    .mutation(async ({ input }) => {
-      return await prisma.user.update({
-        where: { id: input.userId },
-        data: { points: { increment: input.pointsAmount } },
-      });
-    }),
+
   accept: publicProcedure
     .input(
       z.object({

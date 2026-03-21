@@ -4,22 +4,135 @@ import { z } from "zod";
 import { prisma } from "./db";
 import { publicProcedure, router } from "./trpc";
 
+function isTeachOffer(title: string): boolean {
+  const normalized = title
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  return normalized.startsWith("ucze:");
+}
+
+const BASE_POINTS_PER_MINUTE = 1.1;
+const TEACHER_ROLE_MULTIPLIER = 1.2;
+const STUDENT_ROLE_MULTIPLIER = 1.0;
+
+function getTeacherStarMultiplier(rating: number | null | undefined): number {
+  if (rating == null) return 1;
+  if (rating <= 2) return 0.9;
+  if (rating === 3) return 1;
+  if (rating === 4) return 1.2;
+  return 1.4;
+}
+
+function calculateLessonPoints(params: {
+  durationMinutes: number;
+  isTeacher: boolean;
+  lessonRating?: number | null;
+}): number {
+  const safeDuration = Math.max(
+    15,
+    Math.min(300, params.durationMinutes || 60),
+  );
+  const roleMultiplier = params.isTeacher
+    ? TEACHER_ROLE_MULTIPLIER
+    : STUDENT_ROLE_MULTIPLIER;
+  const qualityMultiplier = params.isTeacher
+    ? getTeacherStarMultiplier(params.lessonRating)
+    : 1;
+
+  return Math.max(
+    1,
+    Math.round(
+      safeDuration *
+        BASE_POINTS_PER_MINUTE *
+        roleMultiplier *
+        qualityMultiplier,
+    ),
+  );
+}
+
+const STORE_ITEMS = {
+  "1": { name: "Premium Badge", cost: 100 },
+  "2": { name: "Custom Theme", cost: 250 },
+  "3": { name: "Boost Pass", cost: 500 },
+  "4": { name: "VIP Status", cost: 750 },
+} as const;
+
 export const appRouter = router({
   fetchOffers: publicProcedure.query(async () => {
-    const offers = await prisma.offer.findMany({
-      orderBy: { createdAt: "desc" },
-      include: { maker: { select: { username: true } } },
+    const teacherStats = await prisma.accept.groupBy({
+      by: ["teacherId"],
+      where: {
+        status: "COMPLETED",
+        lessonRating: { not: null },
+      },
+      _avg: { lessonRating: true },
+      _count: { lessonRating: true },
     });
 
-    return offers.map((offer) => ({
-      id: offer.id,
-      title: offer.title,
-      description: offer.description,
-      makerId: offer.makerId,
-      createdAt: offer.createdAt,
-      updatedAt: offer.updatedAt,
-      makerUsername: offer.maker.username,
-    }));
+    const ratingsByTeacher = new Map(
+      teacherStats.map((s) => [
+        s.teacherId,
+        {
+          avg: s._avg.lessonRating,
+          count: s._count.lessonRating,
+        },
+      ]),
+    );
+
+    const offers = await prisma.offer.findMany({
+      orderBy: { createdAt: "desc" },
+      include: {
+        maker: { select: { username: true } },
+        accepts: {
+          select: {
+            id: true,
+            takerId: true,
+            teacherId: true,
+            studentId: true,
+            scheduledAt: true,
+            durationMinutes: true,
+            scheduleConfirmed: true,
+            status: true,
+            lessonRating: true,
+          },
+        } as any,
+      },
+    });
+
+    return offers.map((offer) => {
+      const teachOffer = isTeachOffer(offer.title);
+      const teacherStat = teachOffer
+        ? ratingsByTeacher.get(offer.makerId)
+        : null;
+
+      return {
+        id: offer.id,
+        title: offer.title,
+        description: offer.description,
+        makerId: offer.makerId,
+        createdAt: offer.createdAt,
+        updatedAt: offer.updatedAt,
+        makerUsername: offer.maker.username,
+        accept: offer.accepts
+          ? {
+              id: offer.accepts.id,
+              takerId: offer.accepts.takerId,
+              teacherId: offer.accepts.teacherId,
+              studentId: offer.accepts.studentId,
+              scheduledAt: offer.accepts.scheduledAt,
+              durationMinutes: offer.accepts.durationMinutes,
+              scheduleConfirmed:
+                (offer.accepts as any).scheduleConfirmed ?? false,
+              status: offer.accepts.status,
+              lessonRating: offer.accepts.lessonRating,
+            }
+          : null,
+        teacherRatingAvg: teacherStat?.avg ?? null,
+        teacherRatingCount: teacherStat?.count ?? 0,
+      };
+    });
   }),
 
   postOffer: publicProcedure
@@ -67,6 +180,45 @@ export const appRouter = router({
       return await prisma.offer.delete({ where: { id: input.id } });
     }),
 
+  acceptOffer: publicProcedure
+    .input(
+      z.object({
+        offerId: z.string().min(1),
+        takerId: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const offer = await prisma.offer.findUnique({
+        where: { id: input.offerId },
+      });
+      if (!offer) throw new Error("Oferta nie istnieje");
+      if (offer.makerId === input.takerId)
+        throw new Error("Nie możesz zaakceptować własnej oferty");
+
+      const existing = await prisma.accept.findUnique({
+        where: { offerId: input.offerId },
+      });
+      if (existing) throw new Error("Ta oferta jest już zaakceptowana");
+
+      const teachOffer = isTeachOffer(offer.title);
+      const teacherId = teachOffer ? offer.makerId : input.takerId;
+      const studentId = teachOffer ? input.takerId : offer.makerId;
+      const scheduleDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      const durationMinutes = 60;
+
+      return await prisma.accept.create({
+        data: {
+          offerId: input.offerId,
+          takerId: input.takerId,
+          teacherId,
+          studentId,
+          scheduledAt: scheduleDate,
+          durationMinutes,
+          scheduleConfirmed: false,
+        } as any,
+      });
+    }),
+
   accept: publicProcedure
     .input(
       z.object({
@@ -75,45 +227,365 @@ export const appRouter = router({
       }),
     )
     .mutation(async ({ input }) => {
-      return await prisma.offer.update({
+      const offer = await prisma.offer.findUnique({
         where: { id: input.offerId },
-        data: { accepts: { create: { takerId: input.takerId } } },
+      });
+      if (!offer) throw new Error("Oferta nie istnieje");
+      if (offer.makerId === input.takerId)
+        throw new Error("Nie możesz zaakceptować własnej oferty");
+
+      const existing = await prisma.accept.findUnique({
+        where: { offerId: input.offerId },
+      });
+      if (existing) throw new Error("Ta oferta jest już zaakceptowana");
+
+      const teachOffer = isTeachOffer(offer.title);
+      const teacherId = teachOffer ? offer.makerId : input.takerId;
+      const studentId = teachOffer ? input.takerId : offer.makerId;
+      const scheduleDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      const durationMinutes = 60;
+
+      return await prisma.accept.create({
+        data: {
+          offerId: input.offerId,
+          takerId: input.takerId,
+          teacherId,
+          studentId,
+          scheduledAt: scheduleDate,
+          durationMinutes,
+          scheduleConfirmed: false,
+        } as any,
       });
     }),
 
-  rateOffer: publicProcedure
+  setLessonSchedule: publicProcedure
     .input(
       z.object({
         offerId: z.string().min(1),
         userId: z.string().min(1),
-        rating: z.number().min(1).max(5),
+        scheduledAt: z.string().datetime(),
+        durationMinutes: z.number().int().min(15).max(300),
       }),
     )
     .mutation(async ({ input }) => {
-      const offer = await prisma.offer.findFirst({
-        include: { accepts: true },
-        where: {
-          id: input.offerId,
-          OR: [
-            { makerId: input.userId },
-            { accepts: { is: { takerId: input.userId } } },
-          ],
-        },
+      const accept = await prisma.accept.findUnique({
+        where: { offerId: input.offerId },
       });
-      if (!offer) throw new Error("Offer not found or user not involved");
+      if (!accept) throw new Error("Lekcja nie istnieje");
+      if (accept.teacherId !== input.userId) {
+        throw new Error("Termin i czas trwania może ustawić tylko nauczyciel");
+      }
+      if (accept.status === "COMPLETED") {
+        throw new Error("Nie można zmienić terminu zakończonej lekcji");
+      }
 
-      if (input.userId === offer.makerId) {
-        await prisma.accept.update({
-          where: { id: offer.accepts?.id },
-          data: { makerRating: input.rating },
+      const date = new Date(input.scheduledAt);
+      if (Number.isNaN(date.getTime())) {
+        throw new Error("Nieprawidłowy termin");
+      }
+      if (date.getTime() <= Date.now()) {
+        throw new Error("Termin musi być w przyszłości");
+      }
+
+      return await prisma.accept.update({
+        where: { id: accept.id },
+        data: {
+          scheduledAt: date,
+          durationMinutes: input.durationMinutes,
+          scheduleConfirmed: true,
+        } as any,
+      });
+    }),
+
+  completeLesson: publicProcedure
+    .input(
+      z.object({
+        offerId: z.string().min(1),
+        userId: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const accept = await prisma.accept.findUnique({
+        where: { offerId: input.offerId },
+      });
+      if (!accept) throw new Error("Lekcja nie istnieje");
+      if (
+        accept.teacherId !== input.userId &&
+        accept.studentId !== input.userId
+      ) {
+        throw new Error("Brak dostępu do tej lekcji");
+      }
+      if (!(accept as any).scheduleConfirmed) {
+        throw new Error(
+          "Przed zakończeniem lekcji nauczyciel musi ustalić termin i czas trwania",
+        );
+      }
+      if (accept.status === "COMPLETED") return accept;
+
+      const durationMinutes = (accept as any).durationMinutes ?? 60;
+      const teacherBasePoints = calculateLessonPoints({
+        durationMinutes,
+        isTeacher: true,
+        lessonRating: null,
+      });
+      const studentBasePoints = calculateLessonPoints({
+        durationMinutes,
+        isTeacher: false,
+      });
+
+      const completed = await prisma.accept.update({
+        where: { id: accept.id },
+        data: { status: "COMPLETED" },
+      });
+
+      if (accept.teacherId === accept.studentId) {
+        await prisma.user.update({
+          where: { id: accept.teacherId },
+          data: {
+            points: { increment: teacherBasePoints + studentBasePoints },
+          },
         });
       } else {
-        await prisma.accept.update({
-          where: { id: offer.accepts?.id },
-          data: { takerRating: input.rating },
+        await prisma.user.update({
+          where: { id: accept.teacherId },
+          data: { points: { increment: teacherBasePoints } },
+        });
+        await prisma.user.update({
+          where: { id: accept.studentId },
+          data: { points: { increment: studentBasePoints } },
         });
       }
-      return offer;
+
+      return completed;
+    }),
+
+  rateLesson: publicProcedure
+    .input(
+      z.object({
+        offerId: z.string().min(1),
+        userId: z.string().min(1),
+        rating: z.number().int().min(1).max(5),
+        review: z.string().trim().max(300).optional(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const accept = await prisma.accept.findUnique({
+        where: { offerId: input.offerId },
+      });
+      if (!accept) throw new Error("Lekcja nie istnieje");
+      if (accept.lessonRating != null) {
+        throw new Error("Ta lekcja została już oceniona");
+      }
+      if (accept.studentId !== input.userId) {
+        throw new Error("Ocenić lekcję może tylko uczeń");
+      }
+      if (accept.status !== "COMPLETED") {
+        throw new Error("Najpierw oznacz lekcję jako zakończoną");
+      }
+
+      const durationMinutes = (accept as any).durationMinutes ?? 60;
+      const teacherBasePoints = calculateLessonPoints({
+        durationMinutes,
+        isTeacher: true,
+        lessonRating: null,
+      });
+      const teacherRatedPoints = calculateLessonPoints({
+        durationMinutes,
+        isTeacher: true,
+        lessonRating: input.rating,
+      });
+      const teacherDelta = teacherRatedPoints - teacherBasePoints;
+
+      const updated = await prisma.accept.update({
+        where: { id: accept.id },
+        data: {
+          lessonRating: input.rating,
+          lessonReview: input.review || null,
+          ratedAt: new Date(),
+        },
+      });
+
+      if (teacherDelta !== 0) {
+        await prisma.user.update({
+          where: { id: accept.teacherId },
+          data: { points: { increment: teacherDelta } },
+        });
+      }
+
+      return updated;
+    }),
+
+  purchaseStoreItem: publicProcedure
+    .input(
+      z.object({
+        userId: z.string().min(1),
+        itemId: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const item = STORE_ITEMS[input.itemId as keyof typeof STORE_ITEMS];
+      if (!item) throw new Error("Ten przedmiot nie istnieje");
+
+      const user = await prisma.user.findUnique({
+        where: { id: input.userId },
+        select: { id: true, points: true },
+      });
+      if (!user) throw new Error("Użytkownik nie istnieje");
+      if ((user.points ?? 0) < item.cost) {
+        throw new Error("Za mało punktów");
+      }
+
+      const updated = await prisma.user.update({
+        where: { id: input.userId },
+        data: { points: { decrement: item.cost } },
+        select: { points: true },
+      });
+
+      return {
+        ok: true,
+        itemName: item.name,
+        cost: item.cost,
+        pointsLeft: updated.points,
+      };
+    }),
+
+  getMyLessons: publicProcedure
+    .input(
+      z.object({
+        userId: z.string().min(1),
+      }),
+    )
+    .query(async ({ input }) => {
+      const lessons = await prisma.accept.findMany({
+        where: {
+          OR: [{ teacherId: input.userId }, { studentId: input.userId }],
+        },
+        include: {
+          offer: {
+            select: {
+              id: true,
+              title: true,
+              description: true,
+            },
+          },
+          teacher: {
+            select: {
+              id: true,
+              username: true,
+            },
+          },
+          student: {
+            select: {
+              id: true,
+              username: true,
+            },
+          },
+        },
+      });
+
+      const normalized = lessons.map((lesson) => ({
+        id: lesson.id,
+        offerId: lesson.offerId,
+        offerTitle: lesson.offer.title,
+        offerDescription: lesson.offer.description,
+        scheduledAt: lesson.scheduledAt,
+        durationMinutes: (lesson as any).durationMinutes ?? 60,
+        scheduleConfirmed: (lesson as any).scheduleConfirmed ?? false,
+        status: lesson.status,
+        lessonRating: lesson.lessonRating,
+        lessonReview: lesson.lessonReview,
+        teacherId: lesson.teacher.id,
+        teacherUsername: lesson.teacher.username,
+        studentId: lesson.student.id,
+        studentUsername: lesson.student.username,
+        canRate:
+          lesson.student.id === input.userId &&
+          lesson.status === "COMPLETED" &&
+          lesson.lessonRating == null,
+        canMarkCompleted:
+          (lesson as any).scheduleConfirmed === true &&
+          lesson.status === "SCHEDULED" &&
+          (lesson.student.id === input.userId ||
+            lesson.teacher.id === input.userId),
+        canSetSchedule:
+          lesson.status === "SCHEDULED" && lesson.teacher.id === input.userId,
+      }));
+
+      return normalized.sort((a, b) => {
+        const aUnfinished = a.status !== "COMPLETED";
+        const bUnfinished = b.status !== "COMPLETED";
+
+        if (aUnfinished !== bUnfinished) {
+          return aUnfinished ? -1 : 1;
+        }
+
+        const aTime = new Date(a.scheduledAt).getTime();
+        const bTime = new Date(b.scheduledAt).getTime();
+        if (Number.isNaN(aTime) && Number.isNaN(bTime)) return 0;
+        if (Number.isNaN(aTime)) return 1;
+        if (Number.isNaN(bTime)) return -1;
+        return aTime - bTime;
+      });
+    }),
+
+  getUserRating: publicProcedure
+    .input(
+      z.object({
+        userId: z.string().min(1),
+      }),
+    )
+    .query(async ({ input }) => {
+      const stats = await prisma.accept.aggregate({
+        where: {
+          teacherId: input.userId,
+          status: "COMPLETED",
+          lessonRating: { not: null },
+        },
+        _avg: { lessonRating: true },
+        _count: { lessonRating: true },
+      });
+
+      return {
+        avgRating: stats._avg.lessonRating,
+        ratingCount: stats._count.lessonRating,
+      };
+    }),
+
+  getHomeStats: publicProcedure
+    .input(
+      z.object({
+        userId: z.string().min(1),
+      }),
+    )
+    .query(async ({ input }) => {
+      const [user, activeOffersCount, ratingStats] = await Promise.all([
+        prisma.user.findUnique({
+          where: { id: input.userId },
+          select: { points: true },
+        }),
+        prisma.offer.count({
+          where: {
+            makerId: input.userId,
+            accepts: { is: null },
+          },
+        }),
+        prisma.accept.aggregate({
+          where: {
+            teacherId: input.userId,
+            status: "COMPLETED",
+            lessonRating: { not: null },
+          },
+          _avg: { lessonRating: true },
+          _count: { lessonRating: true },
+        }),
+      ]);
+
+      return {
+        points: user?.points ?? 0,
+        activeOffersCount,
+        avgRating: ratingStats._avg.lessonRating,
+        ratingCount: ratingStats._count.lessonRating,
+      };
     }),
 
   login: publicProcedure

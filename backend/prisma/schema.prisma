@@ -21,6 +21,8 @@ model User {
   points      Int      @default(0)
   offers       Offer[]
   accepts      Accept[]
+  teachingLessons Accept[] @relation("TeacherLessons")
+  studyLessons    Accept[] @relation("StudentLessons")
 }
 
 model Offer {
@@ -35,12 +37,27 @@ model Offer {
 }
 
 model Accept {
-  id          String   @id @default(cuid())
-  offer       Offer   @relation(fields: [offerId], references: [id])
-  offerId     String  @unique
-  taker       User     @relation(fields: [takerId], references: [id])
-  takerId     String
-  takerRating Int?
-  makerRating Int?
-  createdAt   DateTime @default(now())
+  id           String      @id @default(cuid())
+  offer        Offer       @relation(fields: [offerId], references: [id])
+  offerId      String      @unique
+  taker        User        @relation(fields: [takerId], references: [id])
+  takerId      String
+  teacher      User        @relation("TeacherLessons", fields: [teacherId], references: [id])
+  teacherId    String
+  student      User        @relation("StudentLessons", fields: [studentId], references: [id])
+  studentId    String
+  scheduledAt  DateTime
+  durationMinutes Int      @default(60)
+  scheduleConfirmed Boolean @default(false)
+  status       LessonStatus @default(SCHEDULED)
+  lessonRating Int?
+  lessonReview String?
+  ratedAt      DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+}
+
+enum LessonStatus {
+  SCHEDULED
+  COMPLETED
 }

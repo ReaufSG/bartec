@@ -4,16 +4,16 @@ import { trpc } from "@/lib/trpc_client";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useContext, useEffect, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  RefreshControl,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  useColorScheme,
-  View,
+    ActivityIndicator,
+    Alert,
+    FlatList,
+    RefreshControl,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    useColorScheme,
+    View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -27,6 +27,19 @@ type Offer = {
   username?: string;
   createdAt: string;
   updatedAt: string;
+  accept?: {
+    id: string;
+    takerId: string;
+    teacherId: string;
+    studentId: string;
+    scheduledAt: string;
+    durationMinutes: number;
+    scheduleConfirmed?: boolean;
+    status: "SCHEDULED" | "COMPLETED";
+    lessonRating: number | null;
+  } | null;
+  teacherRatingAvg?: number | null;
+  teacherRatingCount?: number;
 };
 
 const FILTERS = [
@@ -41,6 +54,7 @@ const FILTERS = [
   { key: "inf", label: "Informatyka" },
   { key: "geo", label: "Geografia" },
   { key: "szt", label: "Sztuka" },
+  { key: "wf", label: "W-F" },
 ];
 
 const SUBJECT_MATCH: Record<string, string[]> = {
@@ -54,6 +68,15 @@ const SUBJECT_MATCH: Record<string, string[]> = {
   inf: ["informatyka", "programowanie", "python", "algorytm"],
   geo: ["geografia", "mapa", "geolog"],
   szt: ["sztuka", "rysunek", "malarstwo", "plastyka"],
+  wf: [
+    "w-f",
+    "wf",
+    "wychowanie fizyczne",
+    "sport",
+    "siatkowka",
+    "pilka",
+    "koszykowka",
+  ],
 };
 
 function normalizeText(text: string): string {
@@ -73,6 +96,16 @@ function formatTime(date: string): string {
   return d.toLocaleDateString("pl-PL");
 }
 
+function formatLessonDate(date: string): string {
+  return new Date(date).toLocaleString("pl-PL", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function getInitials(username?: string): string {
   const cleaned = username?.trim() ?? "";
   if (!cleaned) return "?";
@@ -86,19 +119,15 @@ function getInitials(username?: string): string {
 function OfferCard({
   item,
   C,
+  currentUserId,
   onAccept,
-  onDelete,
-  isOwn,
   accepting,
-  deleting,
 }: {
   item: Offer;
   C: Colors;
-  onAccept: (id: string) => void;
-  onDelete: (id: string) => void;
-  isOwn: boolean;
+  currentUserId: string | null;
+  onAccept: (offer: Offer) => void;
   accepting: boolean;
-  deleting: boolean;
 }) {
   const isTeach = item.title.startsWith("Uczę:");
   const badgeBg = isTeach ? C.cyanBg : C.limeBg;
@@ -109,6 +138,9 @@ function OfferCard({
     item.maker?.username?.trim() ||
     item.username?.trim() ||
     `użytkownik ${item.makerId.slice(0, 6)}`;
+
+  const hasAcceptance = Boolean(item.accept);
+  const acceptedByMe = item.accept?.takerId === currentUserId;
 
   return (
     <View
@@ -137,6 +169,42 @@ function OfferCard({
         {item.description}
       </Text>
 
+      {isTeach && (item.teacherRatingCount ?? 0) > 0 && (
+        <View
+          style={[
+            ss.ratingBadge,
+            { backgroundColor: C.amberBg, borderColor: C.amberBdr },
+          ]}
+        >
+          <Text style={[ss.ratingText, { color: C.amber }]}>
+            {Number(item.teacherRatingAvg ?? 0).toFixed(1)} ★ (
+            {item.teacherRatingCount} ocen)
+          </Text>
+        </View>
+      )}
+
+      {item.accept && (
+        <View
+          style={[
+            ss.acceptInfoBox,
+            { borderColor: C.border2, backgroundColor: C.surface2 },
+          ]}
+        >
+          <Text style={[ss.acceptInfoText, { color: C.text2 }]}>
+            Termin: {formatLessonDate(item.accept.scheduledAt)}
+          </Text>
+          <Text
+            style={[
+              ss.acceptInfoText,
+              { color: item.accept.status === "COMPLETED" ? C.lime : C.cyan },
+            ]}
+          >
+            Status:{" "}
+            {item.accept.status === "COMPLETED" ? "zakończona" : "zaplanowana"}
+          </Text>
+        </View>
+      )}
+
       <View style={[ss.cardFooter, { borderTopColor: C.border }]}>
         <View style={ss.authorWrap}>
           <View
@@ -153,7 +221,8 @@ function OfferCard({
             {authorName}
           </Text>
         </View>
-        {!isOwn && (
+
+        {!hasAcceptance ? (
           <TouchableOpacity
             style={[
               ss.acceptBtn,
@@ -161,7 +230,7 @@ function OfferCard({
               accepting && { opacity: 0.6 },
             ]}
             activeOpacity={0.75}
-            onPress={() => onAccept(item.id)}
+            onPress={() => onAccept(item)}
             disabled={accepting}
           >
             {accepting ? (
@@ -172,24 +241,25 @@ function OfferCard({
               </Text>
             )}
           </TouchableOpacity>
-        )}
-        {isOwn && (
-          <TouchableOpacity
+        ) : (
+          <View
             style={[
-              ss.deleteBtn,
-              { backgroundColor: C.roseBg, borderColor: C.roseBdr },
-              deleting && { opacity: 0.6 },
+              ss.lockedBadge,
+              {
+                backgroundColor: acceptedByMe ? C.cyanBg : C.border,
+                borderColor: acceptedByMe ? C.cyanBdr : C.border2,
+              },
             ]}
-            activeOpacity={0.75}
-            onPress={() => onDelete(item.id)}
-            disabled={deleting}
           >
-            {deleting ? (
-              <ActivityIndicator color={C.rose} size="small" />
-            ) : (
-              <Text style={[ss.deleteTxt, { color: C.rose }]}>usuń</Text>
-            )}
-          </TouchableOpacity>
+            <Text
+              style={[
+                ss.lockedText,
+                { color: acceptedByMe ? C.cyan : C.text3 },
+              ]}
+            >
+              {acceptedByMe ? "Twoja lekcja" : "Już przyjęte"}
+            </Text>
+          </View>
         )}
       </View>
     </View>
@@ -209,7 +279,6 @@ export default function Explore() {
   const [filter, setFilter] = useState("all");
   const [filterOpen, setFilterOpen] = useState(false);
   const [accepting, setAccepting] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState<string | null>(null);
 
   const fetchOffers = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -244,17 +313,21 @@ export default function Explore() {
     fetchOffers(true);
   };
 
-  const handleAccept = async (offerId: string) => {
+  const handleAccept = async (offer: Offer) => {
     if (!auth?.userId) {
       Alert.alert("Błąd", "Nie jesteś zalogowany");
       return;
     }
-    setAccepting(offerId);
+
+    setAccepting(offer.id);
     try {
-      await trpc.accept.mutate({ offerId, takerId: auth.userId });
+      await trpc.acceptOffer.mutate({
+        offerId: offer.id,
+        takerId: auth.userId,
+      });
       Alert.alert(
-        "Sukces!",
-        "Zaakceptowałeś ofertę. Skontaktuj się z autorem przez czat.",
+        "Sukces",
+        "Oferta została przyjęta. Termin i czas trwania ustawi nauczyciel.",
       );
       await fetchOffers(true);
     } catch (e: any) {
@@ -264,50 +337,18 @@ export default function Explore() {
     }
   };
 
-  const handleDelete = (offerId: string) => {
-    if (!auth?.userId) {
-      Alert.alert("Błąd", "Nie jesteś zalogowany");
-      return;
-    }
-    const offer = offers.find((o) => o.id === offerId);
-    if (!offer || offer.makerId !== auth.userId) {
-      Alert.alert("Błąd", "Możesz usunąć tylko własną ofertę");
-      return;
-    }
-
-    Alert.alert("Usuń ofertę", "Na pewno chcesz usunąć tę ofertę?", [
-      { text: "Anuluj", style: "cancel" },
-      {
-        text: "Usuń",
-        style: "destructive",
-        onPress: async () => {
-          setDeleting(offerId);
-          try {
-            await trpc.deleteOffer.mutate({
-              id: offerId,
-              makerId: auth.userId,
-            });
-            await fetchOffers(true);
-          } catch (e: any) {
-            Alert.alert("Błąd", e?.message ?? "Nie udało się usunąć oferty");
-          } finally {
-            setDeleting(null);
-          }
-        },
-      },
-    ]);
-  };
-
   const activeFilter = FILTERS.find((f) => f.key === filter) ?? FILTERS[0];
 
   const offersWithoutOwn = auth?.userId
     ? offers.filter((o) => o.makerId !== auth.userId)
     : offers;
 
+  const availableOffers = offersWithoutOwn.filter((o) => !o.accept);
+
   const filtered =
     filter === "all"
-      ? offersWithoutOwn
-      : offersWithoutOwn.filter((o) => {
+      ? availableOffers
+      : availableOffers.filter((o) => {
           const haystack = normalizeText(`${o.title} ${o.description}`);
           const needles = SUBJECT_MATCH[filter] ?? [filter];
           return needles.some((needle) =>
@@ -450,11 +491,9 @@ export default function Explore() {
             <OfferCard
               item={item}
               C={C}
+              currentUserId={auth?.userId ?? null}
               onAccept={handleAccept}
-              onDelete={handleDelete}
-              isOwn={item.makerId === auth?.userId}
               accepting={accepting === item.id}
-              deleting={deleting === item.id}
             />
           )}
         />
@@ -560,6 +599,24 @@ const ss = StyleSheet.create({
   cardTitle: { fontSize: 13, fontWeight: "500", lineHeight: 18 },
   cardDesc: { fontSize: 11, fontFamily: "monospace", lineHeight: 16 },
 
+  ratingBadge: {
+    borderWidth: 1,
+    borderRadius: 8,
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  ratingText: { fontSize: 10, fontFamily: "monospace", fontWeight: "600" },
+
+  acceptInfoBox: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 4,
+  },
+  acceptInfoText: { fontSize: 10, fontFamily: "monospace" },
+
   cardFooter: {
     flexDirection: "row",
     alignItems: "center",
@@ -594,13 +651,12 @@ const ss = StyleSheet.create({
     alignItems: "center",
   },
   acceptTxt: { fontSize: 10, fontFamily: "monospace", fontWeight: "500" },
-  deleteBtn: {
+
+  lockedBadge: {
     borderWidth: 1,
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    minWidth: 44,
-    alignItems: "center",
   },
-  deleteTxt: { fontSize: 10, fontFamily: "monospace", fontWeight: "500" },
+  lockedText: { fontSize: 10, fontFamily: "monospace", fontWeight: "500" },
 });

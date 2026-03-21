@@ -18,7 +18,7 @@ model User {
   passwordHash String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
-  credits      Int      @default(0)
+  points      Int      @default(0)
   offers       Offer[]
   accepts      Accept[]
 }

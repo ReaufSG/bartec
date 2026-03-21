@@ -176,8 +176,6 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <IconStore color={color} />,
         }}
       />
-      <Tabs.Screen name="chat" options={{ href: null }} />
-      <Tabs.Screen name="explore" options={{ href: null }} />
       <Tabs.Screen name="profile" options={{ href: null }} />
       <Tabs.Screen name="calendar" options={{ href: null }} />
     </Tabs>

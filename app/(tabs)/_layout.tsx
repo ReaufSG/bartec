@@ -47,6 +47,15 @@ function IconChat({ color }: { color: string }) {
   );
 }
 
+function IconStore({ color }: { color: string }) {
+  return (
+    <View style={{ width: 22, height: 20, alignItems: 'center', justifyContent: 'center' }}>
+      <View style={[ic.storeHandle, { borderColor: color }]} />
+      <View style={[ic.storeBag, { backgroundColor: color }]} />
+    </View>
+  );
+}
+
 const ic = StyleSheet.create({
   roof:     { width: 0, height: 0, borderLeftWidth: 11, borderRightWidth: 11, borderBottomWidth: 9, borderLeftColor: 'transparent', borderRightColor: 'transparent' },
   wall:     { width: 16, height: 11, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'flex-end', paddingHorizontal: 2 },
@@ -55,6 +64,8 @@ const ic = StyleSheet.create({
   gridCell: { width: 8, height: 8, borderRadius: 2 },
   bubble:   { width: 20, height: 14, borderRadius: 4 },
   tail:     { width: 0, height: 0, borderTopWidth: 5, borderRightWidth: 6, borderRightColor: 'transparent', marginLeft: 3, marginTop: -1 },
+  storeBag: { width: 13, height: 11, borderWidth: 1.5, borderRadius: 2 },
+  storeHandle: { width: 7, height: 4, borderTopWidth: 1.5, borderLeftWidth: 1.5, borderRightWidth: 1.5, borderRadius: 5, borderBottomWidth: 0, marginTop: -2 },
 });
 
 // ── LAYOUT ────────────────────────────────────────────────────────────────────
@@ -115,6 +126,13 @@ export default function TabLayout() {
         options={{
           title: 'Czat',
           tabBarIcon: ({ color }) => <IconChat color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="store"
+        options={{
+          title: 'Sklep',
+          tabBarIcon: ({ color }) => <IconStore color={color} />,
         }}
       />
       <Tabs.Screen

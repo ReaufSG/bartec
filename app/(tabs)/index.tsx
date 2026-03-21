@@ -5,14 +5,14 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import {
-    Image,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    useColorScheme,
-    View,
+  Image,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useColorScheme,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -340,7 +340,7 @@ export default function Index() {
     const monthYear = now
       .toLocaleDateString("pl-PL", { month: "long", year: "numeric" })
       .replace(/^./, (s) => s.toUpperCase());
-    return `Kalendarz - ${monthYear}`;
+    return `// Kalendarz - ${monthYear}`;
   }, []);
 
   const LESSONS: Lesson[] = useMemo(() => {
@@ -449,7 +449,7 @@ export default function Index() {
       >
         {/* Greeting */}
         <View style={ss.greeting}>
-          <Text style={[ss.greetSub, { color: C.text3 }]}>Dzień dobry</Text>
+          <Text style={[ss.greetSub, { color: C.text3 }]}>// Dzień dobry</Text>
           <Text style={[ss.greetName, { color: C.text1 }]}>{username}</Text>
         </View>
 
@@ -605,7 +605,11 @@ export default function Index() {
         </ScrollView>
 
         {/* UPCOMING */}
-        <SectionHeader title="Nadchodzące spotkania" onMore={() => {}} C={C} />
+        <SectionHeader
+          title="// Nadchodzące spotkania"
+          onMore={() => {}}
+          C={C}
+        />
         <View style={ss.lessonsList}>
           {LESSONS.length > 0 ? (
             LESSONS.map((l) => <LessonCard key={l.id} item={l} C={C} />)

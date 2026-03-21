@@ -7,21 +7,37 @@ import { trpc } from "./trpc_client";
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [userToken,  setUserToken]  = useState<string | null>(null);
   const [username,   setUsername]   = useState<string | null>(null);
+  const [userId,     setUserId]     = useState<string | null>(null);
   const [createdAt,  setCreatedAt]  = useState<string | null>(null);
   const [loading,    setLoading]    = useState(true);
   const router   = useRouter();
   const segments = useSegments();
 
-  // Ładuj dane przy starcie
   useEffect(() => {
     const bootstrapAsync = async () => {
       try {
-        const token     = await AsyncStorage.getItem("userToken");
-        const name      = await AsyncStorage.getItem("username");
-        const created   = await AsyncStorage.getItem("createdAt");
-        setUserToken(token);
-        setUsername(name);
-        setCreatedAt(created);
+        const [token, name, id, created] = await AsyncStorage.multiGet([
+          'userToken', 'username', 'userId', 'createdAt'
+        ]).then(pairs => pairs.map(p => p[1]));
+
+        setUserToken(token ?? null);
+        setUsername(name ?? null);
+        setCreatedAt(created ?? null);
+
+        // jeśli userId brak ale token jest — wyciągnij z JWT
+        if (!id && token) {
+          try {
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            setUserId(payload.userId ?? null);
+            if (payload.userId) {
+              await AsyncStorage.setItem('userId', payload.userId);
+            }
+          } catch {
+            setUserId(null);
+          }
+        } else {
+          setUserId(id ?? null);
+        }
       } catch (e) {
         console.error(e);
       } finally {
@@ -31,7 +47,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     bootstrapAsync();
   }, []);
 
-  // Guard
   useEffect(() => {
     if (loading) return;
     const inLogin = segments[0] === "login";
@@ -46,42 +61,45 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const result = await trpc.login.mutate(credentials);
     const token = (result as any).toke ?? result.token;
     if (!token) throw new Error("No token returned from server");
-    const created = result.createdAt ?? new Date().toISOString();
-    await AsyncStorage.setItem("userToken",  token);
-    await AsyncStorage.setItem("username",   result.username);
-    await AsyncStorage.setItem("createdAt",  created);
+    await AsyncStorage.multiSet([
+      ['userToken',  token],
+      ['username',   result.username],
+      ['userId',     result.id],
+      ['createdAt',  String(result.createdAt)],
+    ]);
     setUserToken(token);
     setUsername(result.username);
-    setCreatedAt(created);
+    setUserId(result.id);
+    setCreatedAt(String(result.createdAt));
   };
 
-  const createUser = async (
-    credentials: typeof trpc.createUser.mutate.arguments,
-  ) => {
+  const createUser = async (credentials: typeof trpc.createUser.mutate.arguments) => {
     const result = await trpc.createUser.mutate(credentials);
     const token = result.token;
     if (!token) throw new Error("No token returned from server");
-    const created = result.user.createdAt ?? new Date().toISOString();
-    await AsyncStorage.setItem("userToken",  token);
-    await AsyncStorage.setItem("username",   result.user.username);
-    await AsyncStorage.setItem("createdAt",  created);
+    await AsyncStorage.multiSet([
+      ['userToken',  token],
+      ['username',   result.user.username],
+      ['userId',     result.user.id],
+      ['createdAt',  String(result.user.createdAt)],
+    ]);
     setUserToken(token);
     setUsername(result.user.username);
-    setCreatedAt(created);
+    setUserId(result.user.id);
+    setCreatedAt(String(result.user.createdAt));
   };
 
   const logout = async () => {
-    await AsyncStorage.removeItem("userToken");
-    await AsyncStorage.removeItem("username");
-    await AsyncStorage.removeItem("createdAt");
+    await AsyncStorage.multiRemove(['userToken', 'username', 'userId', 'createdAt']);
     setUserToken(null);
     setUsername(null);
+    setUserId(null);
     setCreatedAt(null);
   };
 
   return (
     <TokenContext.Provider
-      value={{ userToken, username, createdAt, login, logout, loading, createUser }}
+      value={{ userToken, username, userId, createdAt, login, logout, loading, createUser }}
     >
       {children}
     </TokenContext.Provider>

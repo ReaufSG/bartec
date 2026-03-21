@@ -30,13 +30,13 @@ model Offer {
   makerId     String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  accepts     Accept[]
+  accepts     Accept?
 }
 
 model Accept {
   id          String   @id @default(cuid())
-  offer       Offer    @relation(fields: [offerId], references: [id])
-  offerId     String
+  offer       Offer   @relation(fields: [offerId], references: [id])
+  offerId     String  @unique
   taker       User     @relation(fields: [takerId], references: [id])
   takerId     String
   takerRating Int?

@@ -82,3 +82,10 @@ enum LessonStatus {
   SCHEDULED
   COMPLETED
 }
+
+model SetupCodes {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  createdAt DateTime @default(now())
+  used      Boolean  @default(false)
+}

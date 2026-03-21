@@ -1,6 +1,7 @@
 import { DARK, LIGHT } from "@/lib/colors";
 import { Tabs } from "expo-router";
 import { StyleSheet, useColorScheme, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // ── ICONS ─────────────────────────────────────────────────────────────────────
 function IconHome({ color, doorColor }: { color: string; doorColor: string }) {
@@ -114,17 +115,20 @@ const ic = StyleSheet.create({
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const C = colorScheme === "dark" ? DARK : LIGHT;
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, 8);
 
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
+        tabBarHideOnKeyboard: true,
         tabBarStyle: {
           backgroundColor: C.surface2,
           borderTopColor: C.border,
           borderTopWidth: 1,
-          height: 64,
-          paddingBottom: 8,
+          height: 56 + bottomInset,
+          paddingBottom: bottomInset,
           paddingTop: 6,
         },
         tabBarActiveTintColor: C.cyan,

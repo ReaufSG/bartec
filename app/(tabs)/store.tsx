@@ -21,6 +21,8 @@ type StoreItem = {
   name: string;
   cost: number;
   description: string;
+  kind: "HAND_RAISE" | "FONT" | "BORDER";
+  value?: string;
   tagColor: string;
   tagBg: string;
   tagBdr: string;
@@ -30,43 +32,110 @@ function getStoreItems(C: Colors): StoreItem[] {
   return [
     {
       id: "1",
-      emoji: "⭐",
-      name: "Premium Badge",
-      cost: 100,
-      description: "Zabłyśnij w stylu",
+      emoji: "✋",
+      name: "R-ka na lekcję",
+      cost: 1000,
+      description: "Jednorazowe podniesienie ręki przed lekcją",
+      kind: "HAND_RAISE",
       tagColor: C.amber,
       tagBg: C.amberBg,
       tagBdr: C.amberBdr,
     },
     {
       id: "2",
-      emoji: "🎨",
-      name: "Custom Theme",
-      cost: 250,
-      description: "Odblokuj nowy motyw",
+      emoji: "𝓕",
+      name: "Font nazwy: Serif",
+      cost: 800,
+      description: "Zmienia styl nazwy profilu",
+      kind: "FONT",
+      value: "SERIF",
       tagColor: C.rose,
       tagBg: C.roseBg,
       tagBdr: C.roseBdr,
     },
     {
       id: "3",
-      emoji: "🚀",
-      name: "Boost Pass",
-      cost: 500,
-      description: "Zwiększ widoczność profilu",
+      emoji: "𝗙",
+      name: "Font nazwy: Sans",
+      cost: 800,
+      description: "Nowoczesny styl nazwy profilu",
+      kind: "FONT",
+      value: "SANS",
       tagColor: C.cyan,
       tagBg: C.cyanBg,
       tagBdr: C.cyanBdr,
     },
     {
       id: "4",
-      emoji: "💎",
-      name: "VIP Status",
-      cost: 750,
-      description: "Odznaka elitarna na rok",
+      emoji: "🟠",
+      name: "Obramówka konta: Amber",
+      cost: 650,
+      description: "Kolor obramówki panelu konta",
+      kind: "BORDER",
+      value: "AMBER",
+      tagColor: C.amber,
+      tagBg: C.amberBg,
+      tagBdr: C.amberBdr,
+    },
+    {
+      id: "5",
+      emoji: "🟣",
+      name: "Obramówka konta: Rose",
+      cost: 650,
+      description: "Kolor obramówki panelu konta",
+      kind: "BORDER",
+      value: "ROSE",
+      tagColor: C.rose,
+      tagBg: C.roseBg,
+      tagBdr: C.roseBdr,
+    },
+    {
+      id: "6",
+      emoji: "🟢",
+      name: "Obramówka konta: Lime",
+      cost: 650,
+      description: "Kolor obramówki panelu konta",
+      kind: "BORDER",
+      value: "LIME",
       tagColor: C.lime,
       tagBg: C.limeBg,
       tagBdr: C.limeBdr,
+    },
+    {
+      id: "7",
+      emoji: "🅳",
+      name: "Font nazwy: Display",
+      cost: 900,
+      description: "Mocny, wyrazisty styl nazwy",
+      kind: "FONT",
+      value: "DISPLAY",
+      tagColor: C.amber,
+      tagBg: C.amberBg,
+      tagBdr: C.amberBdr,
+    },
+    {
+      id: "8",
+      emoji: "⌘",
+      name: "Font nazwy: Tech",
+      cost: 950,
+      description: "Techniczny styl nazwy z większym spacingiem",
+      kind: "FONT",
+      value: "TECH",
+      tagColor: C.cyan,
+      tagBg: C.cyanBg,
+      tagBdr: C.cyanBdr,
+    },
+    {
+      id: "9",
+      emoji: "🔵",
+      name: "Obramówka konta: Navy",
+      cost: 700,
+      description: "Granatowy akcent obramówki konta",
+      kind: "BORDER",
+      value: "NAVY",
+      tagColor: C.navy,
+      tagBg: C.cyanBg,
+      tagBdr: C.cyanBdr,
     },
   ];
 }
@@ -131,6 +200,9 @@ export default function Store() {
   const auth = useContext(TokenContext);
   const STORE_LIST = getStoreItems(C);
   const [credits, setCredits] = useState(0);
+  const [handRaises, setHandRaises] = useState(0);
+  const [nameFont, setNameFont] = useState("MONO");
+  const [borderColor, setBorderColor] = useState("CYAN");
 
   const loadCredits = useCallback(async () => {
     if (!auth?.userId) {
@@ -140,8 +212,14 @@ export default function Store() {
     try {
       const stats = await trpc.getHomeStats.query({ userId: auth.userId });
       setCredits((stats as any).points ?? 0);
+      setHandRaises((stats as any).handRaises ?? 0);
+      setNameFont((stats as any).nameFont ?? "MONO");
+      setBorderColor((stats as any).borderColor ?? "CYAN");
     } catch {
       setCredits(0);
+      setHandRaises(0);
+      setNameFont("MONO");
+      setBorderColor("CYAN");
     }
   }, [auth?.userId]);
 
@@ -172,6 +250,9 @@ export default function Store() {
               itemId: item.id,
             });
             setCredits((res as any).pointsLeft ?? 0);
+            setHandRaises((res as any).handRaises ?? handRaises);
+            setNameFont((res as any).nameFont ?? nameFont);
+            setBorderColor((res as any).borderColor ?? borderColor);
             Alert.alert("Sukces", `Zakupiono: ${item.name}`);
           } catch (e: any) {
             Alert.alert(
@@ -203,6 +284,18 @@ export default function Store() {
         >
           <Text style={[ss.creditsText, { color: C.lime }]}>{credits} pkt</Text>
         </View>
+      </View>
+
+      <View style={ss.effectsRow}>
+        <Text style={[ss.effectText, { color: C.text3 }]}>
+          R-ka: {handRaises}
+        </Text>
+        <Text style={[ss.effectText, { color: C.text3 }]}>
+          Font: {nameFont}
+        </Text>
+        <Text style={[ss.effectText, { color: C.text3 }]}>
+          Obramówka: {borderColor}
+        </Text>
       </View>
 
       <FlatList
@@ -242,6 +335,13 @@ const ss = StyleSheet.create({
   creditsText: { fontSize: 10, fontFamily: "monospace" },
 
   listContent: { paddingHorizontal: 20, paddingBottom: 20 },
+  effectsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingBottom: 10,
+  },
+  effectText: { fontSize: 10, fontFamily: "monospace" },
 
   card: {
     borderWidth: 1,

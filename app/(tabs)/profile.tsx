@@ -3,7 +3,7 @@ import { TokenContext } from "@/lib/context";
 import { trpc } from "@/lib/trpc_client";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
-import { useCallback, useContext, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import {
     Alert,
     ScrollView,
@@ -24,6 +24,57 @@ function formatJoined(date: Date): string {
   return `${dd}/${mm}/${yyyy}`;
 }
 
+type PointsRank = {
+  medal: string;
+  rankNo: string;
+  topLabel: string;
+};
+
+function mapNameFont(
+  font: "MONO" | "SANS" | "SERIF" | "DISPLAY" | "TECH" | undefined,
+): string {
+  if (font === "SANS") return "System";
+  if (font === "SERIF") return "serif";
+  if (font === "DISPLAY") return "serif";
+  if (font === "TECH") return "monospace";
+  return "monospace";
+}
+
+function mapBorderColor(
+  C: typeof DARK,
+  key: "CYAN" | "LIME" | "AMBER" | "ROSE" | "NAVY" | undefined,
+): string {
+  if (key === "LIME") return C.lime;
+  if (key === "AMBER") return C.amber;
+  if (key === "ROSE") return C.rose;
+  if (key === "NAVY") return C.navy;
+  return C.cyan;
+}
+
+function getPointsRank(
+  rankPosition: number | null,
+  totalUsers: number,
+): PointsRank {
+  if (!rankPosition) {
+    return { medal: "🏅", rankNo: "#-", topLabel: "Top -" };
+  }
+  if (rankPosition === 1)
+    return { medal: "🥇", rankNo: "#1", topLabel: "Top 1" };
+  if (rankPosition === 2)
+    return { medal: "🥈", rankNo: "#2", topLabel: "Top 2" };
+  if (rankPosition === 3)
+    return { medal: "🥉", rankNo: "#3", topLabel: "Top 3" };
+  if (rankPosition === 4)
+    return { medal: "🎖", rankNo: "#4", topLabel: "Top 4" };
+  if (rankPosition === 5)
+    return { medal: "🏅", rankNo: "#5", topLabel: "Top 5" };
+  return {
+    medal: "🏅",
+    rankNo: `#${rankPosition}`,
+    topLabel: `Top 5+/${Math.max(totalUsers, 1)}`,
+  };
+}
+
 export default function Profile() {
   const insets = useSafeAreaInsets();
   const auth = useContext(TokenContext);
@@ -34,6 +85,17 @@ export default function Profile() {
   const [ratingAvg, setRatingAvg] = useState<number | null>(null);
   const [ratingCount, setRatingCount] = useState(0);
   const [points, setPoints] = useState(0);
+  const [rankPosition, setRankPosition] = useState<number | null>(null);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [profileUsername, setProfileUsername] = useState<string | null>(null);
+  const [profileCreatedAt, setProfileCreatedAt] = useState<string | null>(null);
+  const [nameFontKey, setNameFontKey] = useState<
+    "MONO" | "SANS" | "SERIF" | "DISPLAY" | "TECH"
+  >("MONO");
+  const [borderColorKey, setBorderColorKey] = useState<
+    "CYAN" | "LIME" | "AMBER" | "ROSE" | "NAVY"
+  >("CYAN");
+  const targetUserId = auth?.userId ?? null;
 
   useEffect(() => {
     AsyncStorage.getItem("notifications").then((val) => {
@@ -42,19 +104,24 @@ export default function Profile() {
   }, []);
 
   const loadProfileData = useCallback(async () => {
-    if (!auth?.userId) return;
+    if (!targetUserId) return;
     try {
-      const [rating, homeStats] = await Promise.all([
-        trpc.getUserRating.query({ userId: auth.userId }),
-        trpc.getHomeStats.query({ userId: auth.userId }),
-      ]);
-      setRatingAvg((rating as any).avgRating ?? null);
-      setRatingCount((rating as any).ratingCount ?? 0);
-      setPoints((homeStats as any).points ?? 0);
+      const profile = await trpc.getPublicProfile.query({
+        userId: targetUserId,
+      });
+      setRatingAvg((profile as any).avgRating ?? null);
+      setRatingCount((profile as any).ratingCount ?? 0);
+      setPoints((profile as any).points ?? 0);
+      setRankPosition((profile as any).rankPosition ?? null);
+      setTotalUsers((profile as any).totalUsers ?? 0);
+      setProfileUsername((profile as any).username ?? null);
+      setProfileCreatedAt((profile as any).createdAt ?? null);
+      setNameFontKey((profile as any).nameFont ?? "MONO");
+      setBorderColorKey((profile as any).borderColor ?? "CYAN");
     } catch (e: any) {
       Alert.alert("Błąd", e?.message ?? "Nie udało się pobrać danych profilu");
     }
-  }, [auth?.userId]);
+  }, [targetUserId]);
 
   useEffect(() => {
     loadProfileData();
@@ -72,13 +139,25 @@ export default function Profile() {
   };
 
   const displayName = auth?.username ?? "Użytkownik";
-  const initials = displayName
+  const visibleName = profileUsername ?? displayName;
+  const initials = visibleName
     .split(" ")
     .map((w: string) => w[0])
     .join("")
     .slice(0, 2)
     .toUpperCase();
-  const joinedDate = formatJoined(new Date(auth?.createdAt ?? Date.now()));
+  const joinedDate = formatJoined(
+    new Date(profileCreatedAt ?? auth?.createdAt ?? Date.now()),
+  );
+  const pointsRank = useMemo(
+    () => getPointsRank(rankPosition, totalUsers),
+    [rankPosition, totalUsers],
+  );
+  const nameFont = useMemo(() => mapNameFont(nameFontKey), [nameFontKey]);
+  const accountBorder = useMemo(
+    () => mapBorderColor(C as typeof DARK, borderColorKey),
+    [C, borderColorKey],
+  );
 
   const handleLogout = () => {
     Alert.alert("Wyloguj się", "Na pewno chcesz się wylogować?", [
@@ -117,30 +196,34 @@ export default function Profile() {
         <View
           style={[
             s.avatarCard,
-            { backgroundColor: C.surface, borderColor: C.border },
+            { backgroundColor: C.surface, borderColor: accountBorder },
           ]}
         >
           <View
             style={[
               s.avatarCircle,
-              { backgroundColor: C.cyanBg, borderColor: C.cyanBdr },
+              { backgroundColor: C.cyanBg, borderColor: accountBorder },
             ]}
           >
-            <Text style={[s.avatarInitials, { color: C.cyan }]}>
+            <Text style={[s.avatarInitials, { color: accountBorder }]}>
               {initials}
             </Text>
           </View>
           <View style={s.avatarInfo}>
-            <Text style={[s.userName, { color: C.text1 }]}>{displayName}</Text>
+            <Text
+              style={[s.userName, { color: C.text1, fontFamily: nameFont }]}
+            >
+              {visibleName}
+            </Text>
             <View
               style={[
                 s.rankBadge,
                 { backgroundColor: C.amberBg, borderColor: C.amberBdr },
               ]}
             >
-              <Text style={s.rankIcon}>🏅</Text>
+              <Text style={s.rankIcon}>{pointsRank.medal}</Text>
               <Text style={[s.rankText, { color: C.amber }]}>
-                Nauczyciel społeczności
+                Ranking punktów {pointsRank.rankNo} · {pointsRank.topLabel}
               </Text>
             </View>
           </View>

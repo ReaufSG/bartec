@@ -36,6 +36,11 @@ type HomeStats = {
   activeOffersCount: number;
   avgRating: number | null;
   ratingCount: number;
+  rankPosition: number | null;
+  totalUsers: number;
+  nameFont: "MONO" | "SANS" | "SERIF" | "DISPLAY" | "TECH";
+  borderColor: "CYAN" | "LIME" | "AMBER" | "ROSE" | "NAVY";
+  handRaises: number;
 };
 
 type CalendarDay = {
@@ -58,6 +63,57 @@ type Lesson = {
   badgeBdr: string;
   isNext: boolean;
 };
+
+type PointsRank = {
+  medal: string;
+  rankNo: string;
+  topLabel: string;
+};
+
+function getPointsRank(
+  rankPosition: number | null,
+  totalUsers: number,
+): PointsRank {
+  if (!rankPosition) {
+    return { medal: "🏅", rankNo: "#-", topLabel: "Top -" };
+  }
+  if (rankPosition === 1)
+    return { medal: "🥇", rankNo: "#1", topLabel: "Top 1" };
+  if (rankPosition === 2)
+    return { medal: "🥈", rankNo: "#2", topLabel: "Top 2" };
+  if (rankPosition === 3)
+    return { medal: "🥉", rankNo: "#3", topLabel: "Top 3" };
+  if (rankPosition === 4)
+    return { medal: "🎖", rankNo: "#4", topLabel: "Top 4" };
+  if (rankPosition === 5)
+    return { medal: "🏅", rankNo: "#5", topLabel: "Top 5" };
+  return {
+    medal: "🏅",
+    rankNo: `#${rankPosition}`,
+    topLabel: `Top 5+/${Math.max(totalUsers, 1)}`,
+  };
+}
+
+function mapNameFont(
+  font: "MONO" | "SANS" | "SERIF" | "DISPLAY" | "TECH" | undefined,
+): string {
+  if (font === "SANS") return "System";
+  if (font === "SERIF") return "serif";
+  if (font === "DISPLAY") return "serif";
+  if (font === "TECH") return "monospace";
+  return "monospace";
+}
+
+function mapBorderColor(
+  C: Colors,
+  key: "CYAN" | "LIME" | "AMBER" | "ROSE" | "NAVY" | undefined,
+): string {
+  if (key === "LIME") return C.lime;
+  if (key === "AMBER") return C.amber;
+  if (key === "ROSE") return C.rose;
+  if (key === "NAVY") return C.navy;
+  return C.cyan;
+}
 
 // ── SUB-COMPONENTS ────────────────────────────────────────────────────────────
 function SectionHeader({
@@ -177,6 +233,11 @@ export default function Index() {
     activeOffersCount: 0,
     avgRating: null,
     ratingCount: 0,
+    rankPosition: null,
+    totalUsers: 0,
+    nameFont: "MONO",
+    borderColor: "CYAN",
+    handRaises: 0,
   });
 
   const loadHomeData = useCallback(async () => {
@@ -187,6 +248,11 @@ export default function Index() {
         activeOffersCount: 0,
         avgRating: null,
         ratingCount: 0,
+        rankPosition: null,
+        totalUsers: 0,
+        nameFont: "MONO",
+        borderColor: "CYAN",
+        handRaises: 0,
       });
       return;
     }
@@ -207,6 +273,11 @@ export default function Index() {
         activeOffersCount: 0,
         avgRating: null,
         ratingCount: 0,
+        rankPosition: null,
+        totalUsers: 0,
+        nameFont: "MONO",
+        borderColor: "CYAN",
+        handRaises: 0,
       });
     }
   }, [auth?.userId]);
@@ -322,6 +393,16 @@ export default function Index() {
     });
   }, [lessons, auth?.userId, C]);
 
+  const pointsRank = useMemo(
+    () => getPointsRank(stats.rankPosition, stats.totalUsers),
+    [stats.rankPosition, stats.totalUsers],
+  );
+  const nameFont = useMemo(() => mapNameFont(stats.nameFont), [stats.nameFont]);
+  const accountBorder = useMemo(
+    () => mapBorderColor(C, stats.borderColor),
+    [C, stats.borderColor],
+  );
+
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
       <StatusBar
@@ -334,11 +415,16 @@ export default function Index() {
         <TouchableOpacity
           style={[
             ss.profileBtn,
-            { backgroundColor: C.cyanBg, borderColor: C.cyanBdr },
+            { backgroundColor: C.cyanBg, borderColor: accountBorder },
           ]}
           onPress={() => router.push("/profile" as any)}
         >
-          <Text style={[ss.profileInitials, { color: C.cyan }]}>
+          <Text
+            style={[
+              ss.profileInitials,
+              { color: accountBorder, fontFamily: nameFont },
+            ]}
+          >
             {initials}
           </Text>
           <View
@@ -374,7 +460,7 @@ export default function Index() {
             style={[
               ss.panel,
               ss.panelLeft,
-              { backgroundColor: C.surface, borderColor: C.border },
+              { backgroundColor: C.surface, borderColor: accountBorder },
             ]}
           >
             <Text style={[ss.panelLabel, { color: C.text3 }]}>Twoje konto</Text>
@@ -434,13 +520,13 @@ export default function Index() {
                 { backgroundColor: C.amberBg, borderColor: C.amberBdr },
               ]}
             >
-              <Text style={ss.rankIcon}>🏅</Text>
+              <Text style={ss.rankIcon}>{pointsRank.medal}</Text>
               <View>
                 <Text style={[ss.rankText, { color: C.amber }]}>
-                  Ekspert Matematyki
+                  Ranking punktów {pointsRank.rankNo}
                 </Text>
                 <Text style={[ss.rankSub, { color: C.text3 }]}>
-                  top 5% · 3 odznaki
+                  {pointsRank.topLabel} · {stats.points} pkt
                 </Text>
               </View>
             </View>

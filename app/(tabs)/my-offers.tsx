@@ -45,6 +45,7 @@ type Lesson = {
   status: "SCHEDULED" | "COMPLETED";
   lessonRating: number | null;
   lessonReview: string | null;
+  raisedHandByStudent?: boolean;
   teacherId: string;
   teacherUsername: string;
   studentId: string;
@@ -134,6 +135,14 @@ export default function MyOffers() {
 
             if (aUnfinished !== bUnfinished) {
               return aUnfinished ? -1 : 1;
+            }
+
+            if (!aUnfinished && !bUnfinished) {
+              const aUnrated = a.lessonRating == null;
+              const bUnrated = b.lessonRating == null;
+              if (aUnrated !== bUnrated) {
+                return aUnrated ? -1 : 1;
+              }
             }
 
             const aTime = new Date(a.scheduledAt).getTime();
@@ -259,6 +268,23 @@ export default function MyOffers() {
       await fetchData(true);
     } catch (e: any) {
       Alert.alert("Błąd", e?.message ?? "Nie udało się oznaczyć lekcji");
+    } finally {
+      setBusyLessonOfferId(null);
+    }
+  };
+
+  const handleUseHandRaise = async (lesson: Lesson) => {
+    if (!auth?.userId) return;
+    setBusyLessonOfferId(lesson.offerId);
+    try {
+      await trpc.useLessonHandRaise.mutate({
+        offerId: lesson.offerId,
+        userId: auth.userId,
+      });
+      Alert.alert("Sukces", "Użyto R-ki dla tej lekcji.");
+      await fetchData(true);
+    } catch (e: any) {
+      Alert.alert("Błąd", e?.message ?? "Nie udało się użyć R-ki");
     } finally {
       setBusyLessonOfferId(null);
     }
@@ -577,6 +603,11 @@ export default function MyOffers() {
                       Ocena: {lesson.lessonRating} ★
                     </Text>
                   )}
+                  {lesson.raisedHandByStudent && (
+                    <Text style={[ss.lessonMeta, { color: C.rose }]}>
+                      R-ka użyta przez ucznia
+                    </Text>
+                  )}
 
                   <View style={ss.lessonActions}>
                     {lesson.canSetSchedule && (
@@ -627,6 +658,26 @@ export default function MyOffers() {
                         </Text>
                       </TouchableOpacity>
                     )}
+                    {!isTeacher &&
+                      lesson.status === "SCHEDULED" &&
+                      !lesson.raisedHandByStudent && (
+                        <TouchableOpacity
+                          style={[
+                            ss.lessonBtn,
+                            {
+                              borderColor: C.roseBdr,
+                              backgroundColor: C.roseBg,
+                            },
+                            busy && { opacity: 0.6 },
+                          ]}
+                          disabled={busy}
+                          onPress={() => handleUseHandRaise(lesson)}
+                        >
+                          <Text style={[ss.lessonBtnTxt, { color: C.rose }]}>
+                            Użyj R-ki
+                          </Text>
+                        </TouchableOpacity>
+                      )}
                   </View>
                 </View>
               );

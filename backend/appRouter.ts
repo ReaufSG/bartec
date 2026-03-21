@@ -53,10 +53,19 @@ function calculateLessonPoints(params: {
 }
 
 const STORE_ITEMS = {
-  "1": { name: "Premium Badge", cost: 100 },
-  "2": { name: "Custom Theme", cost: 250 },
-  "3": { name: "Boost Pass", cost: 500 },
-  "4": { name: "VIP Status", cost: 750 },
+  "1": { name: "R-ka na lekcję", cost: 1000, type: "HAND_RAISE" as const },
+  "2": { name: "Font nazwy: Serif", cost: 800, type: "FONT_SERIF" as const },
+  "3": { name: "Font nazwy: Sans", cost: 800, type: "FONT_SANS" as const },
+  "4": { name: "Obramówka: Amber", cost: 650, type: "BORDER_AMBER" as const },
+  "5": { name: "Obramówka: Rose", cost: 650, type: "BORDER_ROSE" as const },
+  "6": { name: "Obramówka: Lime", cost: 650, type: "BORDER_LIME" as const },
+  "7": {
+    name: "Font nazwy: Display",
+    cost: 900,
+    type: "FONT_DISPLAY" as const,
+  },
+  "8": { name: "Font nazwy: Tech", cost: 950, type: "FONT_TECH" as const },
+  "9": { name: "Obramówka: Navy", cost: 700, type: "BORDER_NAVY" as const },
 } as const;
 
 export const appRouter = router({
@@ -415,6 +424,50 @@ export const appRouter = router({
       return updated;
     }),
 
+  useLessonHandRaise: publicProcedure
+    .input(
+      z.object({
+        offerId: z.string().min(1),
+        userId: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      const accept = await prisma.accept.findUnique({
+        where: { offerId: input.offerId },
+      });
+      if (!accept) throw new Error("Lekcja nie istnieje");
+      if (accept.studentId !== input.userId) {
+        throw new Error("R-kę może użyć tylko uczeń tej lekcji");
+      }
+      if (accept.status !== "SCHEDULED") {
+        throw new Error("R-kę można użyć tylko dla lekcji zaplanowanej");
+      }
+      if ((accept as any).raisedHandByStudent) {
+        throw new Error("R-ka została już użyta dla tej lekcji");
+      }
+
+      const user = await (prisma.user as any).findUnique({
+        where: { id: input.userId },
+        select: { handRaises: true },
+      });
+      if (!user || (user.handRaises ?? 0) <= 0) {
+        throw new Error("Nie masz R-ki. Kup ją w sklepie.");
+      }
+
+      await prisma.user.update({
+        where: { id: input.userId },
+        data: { handRaises: { decrement: 1 } },
+      });
+
+      return await prisma.accept.update({
+        where: { id: accept.id },
+        data: {
+          raisedHandByStudent: true,
+          raisedHandAt: new Date(),
+        } as any,
+      });
+    }),
+
   purchaseStoreItem: publicProcedure
     .input(
       z.object({
@@ -426,7 +479,7 @@ export const appRouter = router({
       const item = STORE_ITEMS[input.itemId as keyof typeof STORE_ITEMS];
       if (!item) throw new Error("Ten przedmiot nie istnieje");
 
-      const user = await prisma.user.findUnique({
+      const user = await (prisma.user.findUnique as any)({
         where: { id: input.userId },
         select: { id: true, points: true },
       });
@@ -437,15 +490,46 @@ export const appRouter = router({
 
       const updated = await prisma.user.update({
         where: { id: input.userId },
-        data: { points: { decrement: item.cost } },
-        select: { points: true },
-      });
+        data: {
+          points: { decrement: item.cost },
+          ...(item.type === "HAND_RAISE"
+            ? { handRaises: { increment: 1 } }
+            : {}),
+          ...(item.type === "FONT_SERIF" ? { nameFont: "SERIF" as any } : {}),
+          ...(item.type === "FONT_SANS" ? { nameFont: "SANS" as any } : {}),
+          ...(item.type === "FONT_DISPLAY"
+            ? { nameFont: "DISPLAY" as any }
+            : {}),
+          ...(item.type === "FONT_TECH" ? { nameFont: "TECH" as any } : {}),
+          ...(item.type === "BORDER_AMBER"
+            ? { borderColor: "AMBER" as any }
+            : {}),
+          ...(item.type === "BORDER_ROSE"
+            ? { borderColor: "ROSE" as any }
+            : {}),
+          ...(item.type === "BORDER_LIME"
+            ? { borderColor: "LIME" as any }
+            : {}),
+          ...(item.type === "BORDER_NAVY"
+            ? { borderColor: "NAVY" as any }
+            : {}),
+        },
+        select: {
+          points: true,
+          handRaises: true,
+          nameFont: true,
+          borderColor: true,
+        },
+      } as any);
 
       return {
         ok: true,
         itemName: item.name,
         cost: item.cost,
         pointsLeft: updated.points,
+        handRaises: (updated as any).handRaises ?? 0,
+        nameFont: (updated as any).nameFont ?? "MONO",
+        borderColor: (updated as any).borderColor ?? "CYAN",
       };
     }),
 
@@ -494,6 +578,7 @@ export const appRouter = router({
         status: lesson.status,
         lessonRating: lesson.lessonRating,
         lessonReview: lesson.lessonReview,
+        raisedHandByStudent: (lesson as any).raisedHandByStudent ?? false,
         teacherId: lesson.teacher.id,
         teacherUsername: lesson.teacher.username,
         studentId: lesson.student.id,
@@ -517,6 +602,14 @@ export const appRouter = router({
 
         if (aUnfinished !== bUnfinished) {
           return aUnfinished ? -1 : 1;
+        }
+
+        if (!aUnfinished && !bUnfinished) {
+          const aUnrated = a.lessonRating == null;
+          const bUnrated = b.lessonRating == null;
+          if (aUnrated !== bUnrated) {
+            return aUnrated ? -1 : 1;
+          }
         }
 
         const aTime = new Date(a.scheduledAt).getTime();
@@ -551,6 +644,62 @@ export const appRouter = router({
       };
     }),
 
+  getPublicProfile: publicProcedure
+    .input(
+      z.object({
+        userId: z.string().min(1),
+      }),
+    )
+    .query(async ({ input }) => {
+      const [user, ratingStats, totalUsers] = await Promise.all([
+        prisma.user.findUnique({
+          where: { id: input.userId },
+          select: {
+            id: true,
+            username: true,
+            createdAt: true,
+            points: true,
+            nameFont: true,
+            borderColor: true,
+            handRaises: true,
+          },
+        } as any),
+        prisma.accept.aggregate({
+          where: {
+            teacherId: input.userId,
+            status: "COMPLETED",
+            lessonRating: { not: null },
+          },
+          _avg: { lessonRating: true },
+          _count: { lessonRating: true },
+        }),
+        prisma.user.count(),
+      ]);
+
+      if (!user) {
+        throw new Error("Użytkownik nie istnieje");
+      }
+
+      const rankPosition =
+        (await prisma.user.count({
+          where: { points: { gt: user.points ?? 0 } },
+        })) + 1;
+
+      return {
+        id: user.id,
+        username: user.username,
+        createdAt: user.createdAt,
+        points: user.points ?? 0,
+        nameFont: (user as any).nameFont ?? "MONO",
+        borderColor: (user as any).borderColor ?? "CYAN",
+        handRaises: (user as any).handRaises ?? 0,
+        avgRating: ratingStats._avg.lessonRating,
+        ratingCount: ratingStats._count.lessonRating,
+        rankPosition,
+        totalUsers,
+      };
+    }),
+
   getHomeStats: publicProcedure
     .input(
       z.object({
@@ -561,8 +710,13 @@ export const appRouter = router({
       const [user, activeOffersCount, ratingStats] = await Promise.all([
         prisma.user.findUnique({
           where: { id: input.userId },
-          select: { points: true },
-        }),
+          select: {
+            points: true,
+            nameFont: true,
+            borderColor: true,
+            handRaises: true,
+          },
+        } as any),
         prisma.offer.count({
           where: {
             makerId: input.userId,
@@ -580,11 +734,25 @@ export const appRouter = router({
         }),
       ]);
 
+      const totalUsers = await prisma.user.count();
+      const rankPosition = user
+        ? (await prisma.user.count({
+            where: {
+              points: { gt: user.points ?? 0 },
+            },
+          })) + 1
+        : null;
+
       return {
         points: user?.points ?? 0,
+        nameFont: (user as any)?.nameFont ?? "MONO",
+        borderColor: (user as any)?.borderColor ?? "CYAN",
+        handRaises: (user as any)?.handRaises ?? 0,
         activeOffersCount,
         avgRating: ratingStats._avg.lessonRating,
         ratingCount: ratingStats._count.lessonRating,
+        rankPosition,
+        totalUsers,
       };
     }),
 

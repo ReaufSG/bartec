@@ -2,6 +2,7 @@ import { Colors, DARK, LIGHT } from "@/lib/colors";
 import { TokenContext } from "@/lib/context";
 import { trpc } from "@/lib/trpc_client";
 import { useFocusEffect } from "@react-navigation/native";
+import { useRouter } from "expo-router";
 import { useCallback, useContext, useEffect, useState } from "react";
 import {
     ActivityIndicator,
@@ -122,12 +123,14 @@ function OfferCard({
   currentUserId,
   onAccept,
   accepting,
+  onOpenProfile,
 }: {
   item: Offer;
   C: Colors;
   currentUserId: string | null;
   onAccept: (offer: Offer) => void;
   accepting: boolean;
+  onOpenProfile: (userId: string) => void;
 }) {
   const isTeach = item.title.startsWith("Uczę:");
   const badgeBg = isTeach ? C.cyanBg : C.limeBg;
@@ -206,7 +209,11 @@ function OfferCard({
       )}
 
       <View style={[ss.cardFooter, { borderTopColor: C.border }]}>
-        <View style={ss.authorWrap}>
+        <TouchableOpacity
+          style={ss.authorWrap}
+          activeOpacity={0.75}
+          onPress={() => onOpenProfile(item.makerId)}
+        >
           <View
             style={[
               ss.authorAvatar,
@@ -220,7 +227,7 @@ function OfferCard({
           <Text style={[ss.authorName, { color: C.text3 }]} numberOfLines={1}>
             {authorName}
           </Text>
-        </View>
+        </TouchableOpacity>
 
         {!hasAcceptance ? (
           <TouchableOpacity
@@ -268,6 +275,7 @@ function OfferCard({
 
 export default function Explore() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const colorScheme = useColorScheme();
   const C = colorScheme === "dark" ? DARK : LIGHT;
   const auth = useContext(TokenContext);
@@ -494,6 +502,12 @@ export default function Explore() {
               currentUserId={auth?.userId ?? null}
               onAccept={handleAccept}
               accepting={accepting === item.id}
+              onOpenProfile={(userId) =>
+                router.push({
+                  pathname: "/profile" as any,
+                  params: { userId },
+                })
+              }
             />
           )}
         />

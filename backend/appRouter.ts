@@ -1,8 +1,8 @@
-import { publicProcedure, router } from "./trpc";
 import { compare, hash } from "bcryptjs";
+import { sign } from "jsonwebtoken";
 import { z } from "zod";
 import { prisma } from "./db";
-import { sign } from "jsonwebtoken";
+import { publicProcedure, router } from "./trpc";
 export const appRouter = router({
   login: publicProcedure
     .input(
@@ -23,7 +23,7 @@ export const appRouter = router({
         throw new Error("Invalid username or password");
       }
       return {
-        toke: sign(
+        token: sign(
           { userId: user.id, username: user.username },
           "some-secret",
           { expiresIn: "1h" },

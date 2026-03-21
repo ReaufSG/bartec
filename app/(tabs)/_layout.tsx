@@ -1,22 +1,15 @@
 import { Tabs } from 'expo-router';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, useColorScheme } from 'react-native';
 import React from 'react';
-const C = {
-  bg:       '#05070d',
-  surface2: '#090d18',
-  border:   'rgba(80,120,180,0.14)',
-  cyan:     '#5bc8e8',
-  cyanBg:   'rgba(91,200,232,0.08)',
-  navy:     '#2e4268',
-};
+import { DARK, LIGHT } from '@/lib/colors';
 
 // ── ICONS ─────────────────────────────────────────────────────────────────────
-function IconHome({ color }: { color: string }) {
+function IconHome({ color, doorColor }: { color: string; doorColor: string }) {
   return (
     <View style={{ width: 22, height: 20, alignItems: 'center' }}>
       <View style={[ic.roof, { borderBottomColor: color }]} />
       <View style={[ic.wall, { backgroundColor: color }]}>
-        <View style={[ic.door, { backgroundColor: C.surface2 }]} />
+        <View style={[ic.door, { backgroundColor: doorColor }]} />
       </View>
     </View>
   );
@@ -55,30 +48,20 @@ function IconChat({ color }: { color: string }) {
 }
 
 const ic = StyleSheet.create({
-  roof: {
-    width: 0, height: 0,
-    borderLeftWidth: 11, borderRightWidth: 11, borderBottomWidth: 9,
-    borderLeftColor: 'transparent', borderRightColor: 'transparent',
-  },
-  wall: {
-    width: 16, height: 11,
-    flexDirection: 'row', justifyContent: 'flex-end',
-    alignItems: 'flex-end', paddingHorizontal: 2,
-  },
+  roof:     { width: 0, height: 0, borderLeftWidth: 11, borderRightWidth: 11, borderBottomWidth: 9, borderLeftColor: 'transparent', borderRightColor: 'transparent' },
+  wall:     { width: 16, height: 11, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'flex-end', paddingHorizontal: 2 },
   door:     { width: 5, height: 7 },
   grid:     { width: 20, height: 20, flexDirection: 'row', flexWrap: 'wrap', gap: 3 },
   gridCell: { width: 8, height: 8, borderRadius: 2 },
   bubble:   { width: 20, height: 14, borderRadius: 4 },
-  tail: {
-    width: 0, height: 0,
-    borderTopWidth: 5, borderRightWidth: 6,
-    borderRightColor: 'transparent',
-    marginLeft: 3, marginTop: -1,
-  },
+  tail:     { width: 0, height: 0, borderTopWidth: 5, borderRightWidth: 6, borderRightColor: 'transparent', marginLeft: 3, marginTop: -1 },
 });
 
 // ── LAYOUT ────────────────────────────────────────────────────────────────────
 export default function TabLayout() {
+  const colorScheme = useColorScheme();
+  const C           = colorScheme === 'dark' ? DARK : LIGHT;
+
   return (
     <Tabs
       screenOptions={{
@@ -91,15 +74,15 @@ export default function TabLayout() {
           paddingBottom: 8,
           paddingTop: 6,
         },
-        tabBarActiveTintColor:        C.cyan,
-        tabBarInactiveTintColor:      C.navy,
+        tabBarActiveTintColor:       C.cyan,
+        tabBarInactiveTintColor:     C.navy,
         tabBarLabelStyle: {
           fontSize: 10,
           fontFamily: 'monospace',
           letterSpacing: 0.3,
           marginTop: 2,
         },
-        tabBarActiveBackgroundColor:  C.cyanBg,
+        tabBarActiveBackgroundColor: C.cyanBg,
         tabBarItemStyle: {
           borderRadius: 10,
           marginHorizontal: 3,
@@ -110,7 +93,7 @@ export default function TabLayout() {
         name="index"
         options={{
           title: 'Home',
-          tabBarIcon: ({ color }) => <IconHome color={color} />,
+          tabBarIcon: ({ color }) => <IconHome color={color} doorColor={C.surface2} />,
         }}
       />
       <Tabs.Screen
@@ -134,12 +117,9 @@ export default function TabLayout() {
           tabBarIcon: ({ color }) => <IconChat color={color} />,
         }}
       />
-      {/* profil dostępny jako ekran push, nie zakładka */}
       <Tabs.Screen
         name="profile"
-        options={{
-          href: null,
-        }}
+        options={{ href: null }}
       />
     </Tabs>
   );

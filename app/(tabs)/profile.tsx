@@ -1,60 +1,56 @@
-import React from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
+  Switch,
   StyleSheet,
   StatusBar,
   ScrollView,
   Alert,
+  useColorScheme,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-
-const C = {
-  bg:       '#05070d',
-  surface:  '#0d1221',
-  surface2: '#090d18',
-  border:   'rgba(80,120,180,0.14)',
-  border2:  'rgba(80,120,180,0.26)',
-  text1:    '#e8eef8',
-  text2:    '#8fa8cc',
-  text3:    '#4d6485',
-  cyan:     '#5bc8e8',
-  cyanBg:   'rgba(91,200,232,0.08)',
-  cyanBdr:  'rgba(91,200,232,0.22)',
-  lime:     '#a8e063',
-  limeBg:   'rgba(168,224,99,0.08)',
-  limeBdr:  'rgba(168,224,99,0.22)',
-  amber:    '#f5c842',
-  amberBg:  'rgba(245,200,66,0.08)',
-  amberBdr: 'rgba(245,200,66,0.22)',
-  rose:     '#e8637a',
-  roseBg:   'rgba(232,99,122,0.08)',
-  roseBdr:  'rgba(232,99,122,0.22)',
-};
+import { useContext, useState, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { TokenContext } from '@/lib/context';
+import { DARK, LIGHT } from '@/lib/colors';
 
 const USER = {
-  initials:  'MK',
-  name:      'Marek Kowalski',
-  email:     'marek.k@studyswap.pl',
-  school:    'LO im. Kopernika, Kraków',
-  grade:     'Klasa 3',
-  joined:    'Styczeń 2026',
-  points:    840,
-  swaps:     12,
-  rating:    4.8,
-  rank:      'Ekspert Matematyki',
+  points: 840,
+  swaps:  12,
+  rating: 4.8,
+  rank:   'Ekspert Matematyki',
 };
 
-const INFO_ROWS = [
-  { label: 'Email',   value: USER.email   },
-  { label: 'Szkoła',  value: USER.school  },
-  { label: 'Klasa',   value: USER.grade   },
-  { label: 'Dołączył', value: USER.joined },
-];
+function formatJoined(date: Date): string {
+  const dd   = String(date.getDate()).padStart(2, '0');
+  const mm   = String(date.getMonth() + 1).padStart(2, '0');
+  const yyyy = date.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+}
 
 export default function Profile() {
-  const insets = useSafeAreaInsets();
+  const insets      = useSafeAreaInsets();
+  const auth        = useContext(TokenContext);
+  const colorScheme = useColorScheme();
+  const C           = colorScheme === 'dark' ? DARK : LIGHT;
+
+  const [notifications, setNotifications] = useState(true);
+
+  useEffect(() => {
+    AsyncStorage.getItem('notifications').then(val => {
+      if (val !== null) setNotifications(val !== 'false');
+    });
+  }, []);
+
+  const toggleNotifications = async (val: boolean) => {
+    setNotifications(val);
+    await AsyncStorage.setItem('notifications', String(val));
+  };
+
+  const displayName = auth?.username ?? 'Użytkownik';
+  const initials    = displayName.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase();
+  const joinedDate  = formatJoined(new Date(auth?.createdAt ?? Date.now()));
 
   const handleLogout = () => {
     Alert.alert(
@@ -62,73 +58,99 @@ export default function Profile() {
       'Na pewno chcesz się wylogować?',
       [
         { text: 'Anuluj', style: 'cancel' },
-        { text: 'Wyloguj', style: 'destructive', onPress: () => {} },
+        { text: 'Wyloguj', style: 'destructive', onPress: () => auth?.logout() },
       ]
     );
   };
 
   return (
-    <View style={s.root}>
-      <StatusBar barStyle="light-content" backgroundColor={C.bg} />
+    <View style={{ flex: 1, backgroundColor: C.bg }}>
+      <StatusBar
+        barStyle={colorScheme === 'dark' ? 'light-content' : 'dark-content'}
+        backgroundColor={C.bg}
+      />
 
       {/* TOP NAVBAR */}
       <View style={[s.topNav, { paddingTop: insets.top + 8 }]}>
-        <Text style={s.navTitle}>
+        <Text style={[s.navTitle, { color: C.text1 }]}>
           Pro<Text style={{ color: C.cyan }}>fil</Text>
         </Text>
-        <TouchableOpacity style={s.editBtn} activeOpacity={0.7}>
-          <Text style={s.editText}>edytuj</Text>
+        <TouchableOpacity
+          style={[s.editBtn, { backgroundColor: C.surface, borderColor: C.border }]}
+          activeOpacity={0.7}
+        >
+          <Text style={[s.editText, { color: C.text2 }]}>edytuj</Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={s.scrollContent}
-      >
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scrollContent}>
+
         {/* AVATAR CARD */}
-        <View style={s.avatarCard}>
-          <View style={s.avatarCircle}>
-            <Text style={s.avatarInitials}>{USER.initials}</Text>
+        <View style={[s.avatarCard, { backgroundColor: C.surface, borderColor: C.border }]}>
+          <View style={[s.avatarCircle, { backgroundColor: C.cyanBg, borderColor: C.cyanBdr }]}>
+            <Text style={[s.avatarInitials, { color: C.cyan }]}>{initials}</Text>
           </View>
           <View style={s.avatarInfo}>
-            <Text style={s.userName}>{USER.name}</Text>
-            <View style={s.rankBadge}>
+            <Text style={[s.userName, { color: C.text1 }]}>{displayName}</Text>
+            <View style={[s.rankBadge, { backgroundColor: C.amberBg, borderColor: C.amberBdr }]}>
               <Text style={s.rankIcon}>🏅</Text>
-              <Text style={s.rankText}>{USER.rank}</Text>
+              <Text style={[s.rankText, { color: C.amber }]}>{USER.rank}</Text>
             </View>
           </View>
         </View>
 
         {/* STATS ROW */}
         <View style={s.statsRow}>
-          <View style={[s.statCell, { borderColor: C.amberBdr }]}>
+          <View style={[s.statCell, { backgroundColor: C.surface, borderColor: C.amberBdr }]}>
             <Text style={[s.statNum, { color: C.amber }]}>{USER.points}</Text>
-            <Text style={s.statLabel}>punktów</Text>
+            <Text style={[s.statLabel, { color: C.text3 }]}>punktów</Text>
           </View>
-          <View style={[s.statCell, { borderColor: C.cyanBdr }]}>
+          <View style={[s.statCell, { backgroundColor: C.surface, borderColor: C.cyanBdr }]}>
             <Text style={[s.statNum, { color: C.cyan }]}>{USER.swaps}</Text>
-            <Text style={s.statLabel}>wymian</Text>
+            <Text style={[s.statLabel, { color: C.text3 }]}>wymian</Text>
           </View>
-          <View style={[s.statCell, { borderColor: C.limeBdr }]}>
+          <View style={[s.statCell, { backgroundColor: C.surface, borderColor: C.limeBdr }]}>
             <Text style={[s.statNum, { color: C.lime }]}>{USER.rating} ★</Text>
-            <Text style={s.statLabel}>ocena</Text>
+            <Text style={[s.statLabel, { color: C.text3 }]}>ocena</Text>
           </View>
         </View>
 
-        {/* INFO SECTION */}
-        <Text style={s.sectionLabel}>// dane konta</Text>
-        <View style={s.infoCard}>
-          {INFO_ROWS.map((row, i) => (
-            <View key={row.label} style={[s.infoRow, i < INFO_ROWS.length - 1 && s.infoRowBorder]}>
-              <Text style={s.infoLabel}>{row.label}</Text>
-              <Text style={s.infoValue} numberOfLines={1}>{row.value}</Text>
+        {/* DANE KONTA */}
+        <Text style={[s.sectionLabel, { color: C.text3 }]}>// dane konta</Text>
+        <View style={[s.card, { backgroundColor: C.surface, borderColor: C.border }]}>
+          <View style={s.infoRow}>
+            <Text style={[s.infoLabel, { color: C.text3 }]}>Dołączył</Text>
+            <Text style={[s.infoValue, { color: C.text1 }]}>{joinedDate}</Text>
+          </View>
+        </View>
+
+        {/* USTAWIENIA */}
+        <Text style={[s.sectionLabel, { color: C.text3 }]}>// ustawienia</Text>
+        <View style={[s.card, { backgroundColor: C.surface, borderColor: C.border }]}>
+          <View style={s.settingRow}>
+            <View style={s.settingLeft}>
+              <Text style={s.settingIcon}>🔔</Text>
+              <View>
+                <Text style={[s.settingLabel, { color: C.text1 }]}>Powiadomienia</Text>
+                <Text style={[s.settingSub, { color: C.text3 }]}>{notifications ? 'włączone' : 'wyłączone'}</Text>
+              </View>
             </View>
-          ))}
+            <Switch
+              value={notifications}
+              onValueChange={toggleNotifications}
+              trackColor={{ false: C.border2, true: C.limeBg }}
+              thumbColor={notifications ? C.lime : C.text3}
+            />
+          </View>
         </View>
 
         {/* LOGOUT */}
-        <TouchableOpacity style={s.logoutBtn} onPress={handleLogout} activeOpacity={0.75}>
-          <Text style={s.logoutText}>Wyloguj się</Text>
+        <TouchableOpacity
+          style={[s.logoutBtn, { backgroundColor: C.roseBg, borderColor: C.roseBdr }]}
+          onPress={handleLogout}
+          activeOpacity={0.75}
+        >
+          <Text style={[s.logoutText, { color: C.rose }]}>Wyloguj się</Text>
         </TouchableOpacity>
 
       </ScrollView>
@@ -137,77 +159,40 @@ export default function Profile() {
 }
 
 const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.bg },
   scrollContent: { paddingHorizontal: 20, paddingBottom: 32 },
 
-  topNav: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingBottom: 12,
-  },
-  navTitle: { fontSize: 20, fontWeight: '700', color: C.text1, fontFamily: 'monospace' },
-  editBtn: {
-    backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
-    borderRadius: 8, paddingHorizontal: 12, paddingVertical: 5,
-  },
-  editText: { fontSize: 10, color: C.text2, fontFamily: 'monospace' },
+  topNav:    { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 12 },
+  navTitle:  { fontSize: 20, fontWeight: '700', fontFamily: 'monospace' },
+  editBtn:   { borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 5 },
+  editText:  { fontSize: 10, fontFamily: 'monospace' },
 
-  // avatar card
-  avatarCard: {
-    backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
-    borderRadius: 18, padding: 18,
-    flexDirection: 'row', alignItems: 'center', gap: 16,
-    marginBottom: 10,
-  },
-  avatarCircle: {
-    width: 70, height: 70, borderRadius: 35,
-    backgroundColor: C.cyanBg, borderWidth: 2, borderColor: C.cyanBdr,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  avatarInitials: { fontSize: 22, fontWeight: '700', color: C.cyan, fontFamily: 'monospace' },
-  avatarInfo: { flex: 1, gap: 8 },
-  userName: { fontSize: 16, fontWeight: '600', color: C.text1 },
-  rankBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: C.amberBg, borderWidth: 1, borderColor: C.amberBdr,
-    borderRadius: 7, paddingHorizontal: 8, paddingVertical: 4,
-    alignSelf: 'flex-start',
-  },
-  rankIcon: { fontSize: 12 },
-  rankText: { fontSize: 9, color: C.amber, fontFamily: 'monospace' },
+  avatarCard:     { borderWidth: 1, borderRadius: 18, padding: 18, flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 10 },
+  avatarCircle:   { width: 70, height: 70, borderRadius: 35, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  avatarInitials: { fontSize: 22, fontWeight: '700', fontFamily: 'monospace' },
+  avatarInfo:     { flex: 1, gap: 8 },
+  userName:       { fontSize: 16, fontWeight: '600' },
+  rankBadge:      { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderRadius: 7, paddingHorizontal: 8, paddingVertical: 4, alignSelf: 'flex-start' },
+  rankIcon:       { fontSize: 12 },
+  rankText:       { fontSize: 9, fontFamily: 'monospace' },
 
-  // stats
-  statsRow: {
-    flexDirection: 'row', gap: 8, marginBottom: 20,
-  },
-  statCell: {
-    flex: 1, backgroundColor: C.surface,
-    borderWidth: 1, borderRadius: 14,
-    paddingVertical: 14, alignItems: 'center', gap: 4,
-  },
+  statsRow:  { flexDirection: 'row', gap: 8, marginBottom: 20 },
+  statCell:  { flex: 1, borderWidth: 1, borderRadius: 14, paddingVertical: 14, alignItems: 'center', gap: 4 },
   statNum:   { fontSize: 18, fontWeight: '700', fontFamily: 'monospace' },
-  statLabel: { fontSize: 8, color: C.text3, fontFamily: 'monospace', letterSpacing: 0.5 },
+  statLabel: { fontSize: 8, fontFamily: 'monospace', letterSpacing: 0.5 },
 
-  // info
-  sectionLabel: {
-    fontSize: 9, color: C.text3, fontFamily: 'monospace',
-    letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8,
-  },
-  infoCard: {
-    backgroundColor: C.surface, borderWidth: 1, borderColor: C.border,
-    borderRadius: 16, marginBottom: 24, overflow: 'hidden',
-  },
-  infoRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 13,
-  },
-  infoRowBorder: { borderBottomWidth: 1, borderBottomColor: C.border },
-  infoLabel: { fontSize: 11, color: C.text3, fontFamily: 'monospace' },
-  infoValue: { fontSize: 11, color: C.text1, fontFamily: 'monospace', flex: 1, textAlign: 'right' },
+  sectionLabel: { fontSize: 9, fontFamily: 'monospace', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 },
 
-  // logout
-  logoutBtn: {
-    backgroundColor: C.roseBg, borderWidth: 1, borderColor: C.roseBdr,
-    borderRadius: 14, paddingVertical: 14, alignItems: 'center',
-  },
-  logoutText: { fontSize: 13, color: C.rose, fontFamily: 'monospace', fontWeight: '500' },
+  card:      { borderWidth: 1, borderRadius: 16, marginBottom: 20, overflow: 'hidden' },
+  infoRow:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 13 },
+  infoLabel: { fontSize: 11, fontFamily: 'monospace' },
+  infoValue: { fontSize: 11, fontFamily: 'monospace', flex: 1, textAlign: 'right' },
+
+  settingRow:  { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
+  settingLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  settingIcon: { fontSize: 18 },
+  settingLabel:{ fontSize: 12, fontFamily: 'monospace' },
+  settingSub:  { fontSize: 9, fontFamily: 'monospace', marginTop: 2 },
+
+  logoutBtn:  { borderWidth: 1, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
+  logoutText: { fontSize: 13, fontFamily: 'monospace', fontWeight: '500' },
 });
